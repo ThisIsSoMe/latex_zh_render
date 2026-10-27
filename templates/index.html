@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>LaTeX 中文渲染工具</title>
+  <style>
+    :root { --zh: "Source Han Serif SC", "思源宋体", "Noto Serif CJK SC", "SimSun", "SimHei", serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--zh); background: #f5f5f5; color: #222; }
+    header { padding: 10px 16px; background: #2c3e50; color: #fff; display: flex; gap: 12px; align-items: center; }
+    header h1 { font-size: 18px; margin: 0; flex: 1; }
+    main { display: flex; height: calc(100vh - 48px); }
+    textarea, #preview { flex: 1; margin: 10px; padding: 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; overflow: auto; }
+    textarea { font: 14px/1.5 Menlo, Consolas, monospace; resize: none; }
+    #preview { line-height: 1.8; font-size: 16px; }
+    #preview pre { background: #f0f0f0; padding: 8px; overflow-x: auto; }
+    #preview table { border-collapse: collapse; }
+    #preview th, #preview td { border: 1px solid #bbb; padding: 4px 8px; }
+    #status { font-size: 12px; opacity: .8; }
+    /* MathJax 中 \text{} 的中文使用中文字体 */
+    mjx-container mjx-utext { font-family: var(--zh) !important; }
+  </style>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["$", "$"], ["\\(", "\\)"]],
+        displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+        processEnvironments: true,
+        packages: { "[+]": ["ams", "boldsymbol", "physics", "mhchem", "color"] }
+      },
+      // \text{} 中的中文用浏览器字体渲染
+      svg: { mtextInheritFont: true },
+      startup: { typeset: false }
+    };
+  </script>
+  <script src="/mathjax/tex-svg-full.js" async></script>
+</head>
+<body>
+<header>
+  <h1>LaTeX 中文渲染工具</h1>
+  <span id="status"></span>
+</header>
+<main>
+  <textarea id="src" aria-label="LaTeX / Markdown 源文本" spellcheck="false">{{ demo }}</textarea>
+  <div id="preview" aria-live="polite"></div>
+</main>
+<script>
+  const src = document.getElementById("src");
+  const preview = document.getElementById("preview");
+  const statusEl = document.getElementById("status");
+  let timer = null, seq = 0;
+
+  async function render() {
+    const my = ++seq;
+    statusEl.textContent = "渲染中…";
+    try {
+      const r = await fetch("/api/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: src.value })
+      });
+      const data = await r.json();
+      if (my !== seq) return;               // 丢弃过期结果
+      if (!r.ok) throw new Error(data.error || r.status);
+      await MathJax.startup.promise;
+      MathJax.typesetClear([preview]);
+      preview.innerHTML = data.html;
+      await MathJax.typesetPromise([preview]);
+      statusEl.textContent = "完成";
+    } catch (e) {
+      statusEl.textContent = "出错：" + e.message;
+    }
+  }
+
+  src.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(render, 300); });
+  window.addEventListener("load", render);
+</script>
+</body>
+</html>
